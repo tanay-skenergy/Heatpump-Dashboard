@@ -58,22 +58,54 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    console.log("🔄 Step 1: Starting MQTT Connection...");
+    
     const client = mqtt.connect("wss://emqx.test2.win:10443/mqtt", {
       clientId: "sk_web_" + Math.random().toString(16).substring(2, 8),
-      username: 'mqdevice', password: 'MQDEVICE1431'
+      username: 'mqdevice', 
+      password: 'MQDEVICE1431'
     });
-    client.on("connect", () => { client.subscribe(`device/telemetry/${SAFE_ID}`); });
-    client.on("message", (topic, message) => {
+
+    client.on("connect", () => { 
+      console.log("✅ Step 2: MQTT Connected Successfully!");
+      client.subscribe(`device/telemetry/${SAFE_ID}`); 
+    });
+
+    client.on("error", (err) => {
+      console.error("❌ Step 2: MQTT Connection Failed!", err);
+    });
+
+    client.on("message", async (topic, message) => {
+      console.log("📩 Step 3: Message Received from EMQX!");
       try {
         const p = JSON.parse(message.toString());
+        
         setData(prev => ({ ...prev, 
           waterTemp: p.tank_temp ?? prev.waterTemp,
           current: p.current ?? prev.current,
           inletTemp: p.inlet_temp ?? prev.inletTemp,
           outletTemp: p.outlet_temp ?? prev.outletTemp
         }));
-      } catch (e) { console.error("MQTT Error"); }
+
+        console.log("💾 Step 4: Attempting to save to Supabase...");
+        const { error } = await supabase
+          .from('device_logs')
+          .insert([{ 
+            device_id: SAFE_ID, 
+            tank_temp: p.tank_temp || 0,
+            inlet_temp: p.inlet_temp || 0,
+            outlet_temp: p.outlet_temp || 0,
+            current: p.current || 0
+          }]);
+
+        if (error) console.error("❌ Supabase Error:", error.message);
+        else console.log("🎉 SUCCESS: Data stored in History!");
+
+      } catch (e) { 
+        console.error("❌ Logic Error:", e); 
+      }
     });
+
     return () => { if (client) client.end(); };
   }, []);
 
