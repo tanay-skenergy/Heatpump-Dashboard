@@ -5,7 +5,7 @@ import { createClient } from "@supabase/supabase-js"
 import mqtt from "mqtt"
 import { 
   Activity, Thermometer, Zap, Battery, Gauge as GaugeIcon, 
-  Clock, TrendingUp, IndianRupee, ChevronDown 
+  Clock, TrendingUp, IndianRupee, ChevronDown, LogOut // <-- Added LogOut here
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
 
@@ -55,6 +55,11 @@ export default function Dashboard() {
       .eq('username', userInput)
       .eq('password', passwordInput)
       .single();
+      const handleLogout = () => {
+    localStorage.removeItem("sk_session"); // Clears the memory card
+    setIsAuthenticated(false);             // Sends user back to login screen
+    setUserProfile({ name: "", device_id: "" }); // Clears user data
+  }; 
 
     if (dbUser) {
       const profile = { name: dbUser.name || dbUser.username, device_id: dbUser.assigned_device };
@@ -194,7 +199,25 @@ export default function Dashboard() {
                <button onClick={() => setActiveTab('history')} className={`font-bold text-[10px] tracking-widest uppercase ${activeTab === 'history' ? 'text-cyan-600 border-b-2 border-cyan-600' : 'text-slate-400'}`}>Data History</button>
              </nav>
           </div>
-          <div className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center text-white text-[10px] font-bold">SK</div>
+          {/* User Profile & Logout Section */}
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <div className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center text-white text-[10px] font-bold uppercase">
+                {userProfile.name ? userProfile.name.substring(0, 2) : "SK"}
+              </div>
+              <span className="text-xs font-bold text-slate-700 hidden sm:block">
+                {userProfile.name}
+              </span>
+            </div>
+            
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-1 text-[10px] font-bold text-red-500 bg-red-50 hover:bg-red-100 px-3 py-2 rounded-lg transition-colors uppercase tracking-widest"
+            >
+              <LogOut className="h-3 w-3" />
+              Logout
+            </button>
+          </div>
         </header>
 
         {activeTab === 'live' ? (
