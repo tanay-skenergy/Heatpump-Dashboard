@@ -50,11 +50,36 @@ export default function Dashboard() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data: dbUser } = await supabase
-      .from('app_users').select('*').eq('username', userInput).eq('password', passwordInput).single();
+      .from('app_users')
+      .select('*')
+      .eq('username', userInput)
+      .eq('password', passwordInput)
+      .single();
+
     if (dbUser) {
-      setUserProfile({ name: dbUser.name || dbUser.username, device_id: dbUser.assigned_device });
+      const profile = { name: dbUser.name || dbUser.username, device_id: dbUser.assigned_device };
+      
+      // Save to browser memory
+      localStorage.setItem("sk_session", JSON.stringify(profile));
+      
+      setUserProfile(profile);
       setIsAuthenticated(true);
-    } else { alert("Invalid credentials"); }
+    } else { 
+      alert("Invalid credentials"); 
+    }
+  };
+  // Check for existing session on page load
+  useEffect(() => {
+    const savedSession = localStorage.getItem("sk_session");
+    if (savedSession) {
+      setUserProfile(JSON.parse(savedSession));
+      setIsAuthenticated(true);
+    }
+  }, []);
+  const handleLogout = () => {
+    localStorage.removeItem("sk_session");
+    setIsAuthenticated(false);
+    setUserProfile({ name: "", device_id: "" });
   };
 
   useEffect(() => {
@@ -75,10 +100,13 @@ export default function Dashboard() {
       console.error("❌ Step 2: MQTT Connection Failed!", err);
     });
 
+    let lastSaveTime = 0; // <-- Added timer variable
+
     client.on("message", async (topic, message) => {
-      console.log("📩 Step 3: Message Received from EMQX!");
+      console.log("📩 Step 3: Message Received from EMQX! Updating UI...");
       try {
         const p = JSON.parse(message.toString());
+        const now = Date.now(); // <-- Added current time check
         
         setData(prev => ({ ...prev, 
           waterTemp: p.tank_temp ?? prev.waterTemp,
@@ -87,19 +115,27 @@ export default function Dashboard() {
           outletTemp: p.outlet_temp ?? prev.outletTemp
         }));
 
-        console.log("💾 Step 4: Attempting to save to Supabase...");
-        const { error } = await supabase
-          .from('device_logs')
-          .insert([{ 
-            device_id: SAFE_ID, 
-            tank_temp: p.tank_temp || 0,
-            inlet_temp: p.inlet_temp || 0,
-            outlet_temp: p.outlet_temp || 0,
-            current: p.current || 0
-          }]);
+        // <-- Added 5-minute (300,000ms) gate around the database save
+        if (now - lastSaveTime > 300000) {
+          console.log("💾 5 mins passed! Attempting to save to Supabase...");
+          
+          const { error } = await supabase
+            .from('device_logs')
+            .insert([{ 
+              device_id: SAFE_ID, 
+              tank_temp: p.tank_temp || 0,
+              inlet_temp: p.inlet_temp || 0,
+              outlet_temp: p.outlet_temp || 0,
+              current: p.current || 0
+            }]);
 
-        if (error) console.error("❌ Supabase Error:", error.message);
-        else console.log("🎉 SUCCESS: Data stored in History!");
+          if (error) {
+            console.error("❌ Supabase Error:", error.message);
+          } else {
+            console.log("🎉 SUCCESS: Data stored in History!");
+            lastSaveTime = now; // <-- Reset the timer
+          }
+        }
 
       } catch (e) { 
         console.error("❌ Logic Error:", e); 
