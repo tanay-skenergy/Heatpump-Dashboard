@@ -43,10 +43,9 @@ export default function Dashboard() {
   const [data, setData] = useState({
     waterTemp: 0, inletTemp: 0, outletTemp: 0, setTemp: 55, 
     voltage: 230, current: 0, outputPower: 18.5 
-  });
+  }); 
 
-  const SAFE_ID = "000156"; 
-
+  // 1. The Login Function
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     const { data: dbUser } = await supabase
@@ -55,40 +54,47 @@ export default function Dashboard() {
       .eq('username', userInput)
       .eq('password', passwordInput)
       .single();
-      const handleLogout = () => {
-    localStorage.removeItem("sk_session"); // Clears the memory card
-    setIsAuthenticated(false);             // Sends user back to login screen
-    setUserProfile({ name: "", device_id: "" }); // Clears user data
-  }; 
 
     if (dbUser) {
-      const profile = { name: dbUser.name || dbUser.username, device_id: dbUser.assigned_device };
+      const profile = { 
+        name: dbUser.name || dbUser.username, 
+        device_id: dbUser.assigned_device 
+      };
       
-      // Save to browser memory
       localStorage.setItem("sk_session", JSON.stringify(profile));
-      
       setUserProfile(profile);
       setIsAuthenticated(true);
     } else { 
       alert("Invalid credentials"); 
     }
   };
-  // Check for existing session on page load
-  useEffect(() => {
-    const savedSession = localStorage.getItem("sk_session");
-    if (savedSession) {
-      setUserProfile(JSON.parse(savedSession));
-      setIsAuthenticated(true);
-    }
-  }, []);
+
+  // 2. The Logout Function (Now correctly outside)
   const handleLogout = () => {
     localStorage.removeItem("sk_session");
     setIsAuthenticated(false);
     setUserProfile({ name: "", device_id: "" });
   };
 
+  // 3. The Session Persistence Check
   useEffect(() => {
-    console.log("🔄 Step 1: Starting MQTT Connection...");
+    const savedSession = localStorage.getItem("sk_session");
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        setUserProfile(parsed);
+        setIsAuthenticated(true);
+      } catch (e) {
+        console.error("Session error", e);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    // Stop here if no user is logged in or they don't have a device assigned yet
+    if (!isAuthenticated || !userProfile.device_id) return;
+
+    console.log(`🔄 Starting MQTT Connection for device: ${userProfile.device_id}...`);
     
     const client = mqtt.connect("wss://emqx.test2.win:10443/mqtt", {
       clientId: "sk_web_" + Math.random().toString(16).substring(2, 8),
@@ -97,21 +103,20 @@ export default function Dashboard() {
     });
 
     client.on("connect", () => { 
-      console.log("✅ Step 2: MQTT Connected Successfully!");
-      client.subscribe(`device/telemetry/${SAFE_ID}`); 
+      console.log(`✅ MQTT Connected! Subscribing to ${userProfile.device_id}`);
+      client.subscribe(`device/telemetry/${userProfile.device_id}`); 
     });
 
     client.on("error", (err) => {
-      console.error("❌ Step 2: MQTT Connection Failed!", err);
+      console.error("❌ MQTT Connection Failed!", err);
     });
 
-    let lastSaveTime = 0; // <-- Added timer variable
+    let lastSaveTime = 0; 
 
     client.on("message", async (topic, message) => {
-      console.log("📩 Step 3: Message Received from EMQX! Updating UI...");
       try {
         const p = JSON.parse(message.toString());
-        const now = Date.now(); // <-- Added current time check
+        const now = Date.now(); 
         
         setData(prev => ({ ...prev, 
           waterTemp: p.tank_temp ?? prev.waterTemp,
@@ -120,50 +125,51 @@ export default function Dashboard() {
           outletTemp: p.outlet_temp ?? prev.outletTemp
         }));
 
-        // <-- Added 5-minute (300,000ms) gate around the database save
         if (now - lastSaveTime > 300000) {
-          console.log("💾 5 mins passed! Attempting to save to Supabase...");
-          
-          const { error } = await supabase
-            .from('device_logs')
-            .insert([{ 
-              device_id: SAFE_ID, 
-              tank_temp: p.tank_temp || 0,
-              inlet_temp: p.inlet_temp || 0,
-              outlet_temp: p.outlet_temp || 0,
-              current: p.current || 0
-            }]);
+          // Inside your MQTT message listener
+const { error } = await supabase
+  .from('device_logs')
+  .insert([{ 
+    // THIS IS THE AUTOMATION:
+    device_id: userProfile.device_id, 
+    
+    tank_temp: p.tank_temp,
+    inlet_temp: p.inlet_temp,
+    outlet_temp: p.outlet_temp,
+    current: p.current
+  }]);
 
-          if (error) {
-            console.error("❌ Supabase Error:", error.message);
-          } else {
-            console.log("🎉 SUCCESS: Data stored in History!");
-            lastSaveTime = now; // <-- Reset the timer
-          }
+          if (!error) lastSaveTime = now; 
         }
-
       } catch (e) { 
         console.error("❌ Logic Error:", e); 
       }
     });
 
+    // Cleanup connection when user logs out or leaves page
     return () => { if (client) client.end(); };
-  }, []);
+  }, [isAuthenticated, userProfile.device_id]); // <-- Re-runs when the logged-in user changes
 
   useEffect(() => {
+    if (!isAuthenticated || !userProfile.device_id) return;
+
     const fetchHistory = async () => {
       const { data: hData, error } = await supabase
-        .from('device_logs').select('*').eq('device_id', SAFE_ID)
-        .order('created_at', { ascending: false }).limit(50);
+        .from('device_logs').select('*')
+        .eq('device_id', userProfile.device_id) // <-- Pulls only this customer's data
+        .order('created_at', { ascending: false }).limit(100);
+      
       if (!error && hData) setHistory(hData);
 
       const { count } = await supabase
         .from('device_logs').select('*', { count: 'exact', head: true })
-        .eq('device_id', SAFE_ID).gt('current', 0.5);
+        .eq('device_id', userProfile.device_id).gt('current', 0.5); // <-- Counts only this customer's logs
+      
       if (count !== null) setDbLogCount(count);
     };
+    
     fetchHistory();
-  }, [activeTab]);
+  }, [activeTab, isAuthenticated, userProfile.device_id]);
 
   // Calculations
   const uptimeHours = (dbLogCount * 20) / 3600; 
