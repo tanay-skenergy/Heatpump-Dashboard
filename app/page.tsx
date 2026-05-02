@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = 'https://ppdcvzdkejvrhtxkcftv.supabase.co'
-const supabaseKey = 'YOUR_ANON_PUBLIC_KEY' // Do NOT use the service_role key here!
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwZGN2emRrZWp2cmh0eGtjZnR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTY0NjMsImV4cCI6MjA5MTAzMjQ2M30.HjffvhdU6rmBGsyyCU4kTl862RpZEzF07BAFD75MGOI' // Do NOT use the service_role key here!
 
 export const supabase = createClient(supabaseUrl, supabaseKey)
 import mqtt from "mqtt"
