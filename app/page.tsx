@@ -90,8 +90,11 @@ export default function Dashboard() {
     }
   }, []);
 
-  useEffect(() => {
-    // Stop here if no user is logged in or they don't have a device assigned yet
+    useEffect(() => {
+    console.log("🛠️ DEBUG: useEffect triggered. Auth:", isAuthenticated, "Device:", userProfile.device_id);
+    
+    if (!isAuthenticated || !userProfile.device_id) return;
+    // ... rest of the code// Stop here if no user is logged in or they don't have a device assigned yet
     if (!isAuthenticated || !userProfile.device_id) return;
 
     console.log(`🔄 Starting MQTT Connection for device: ${userProfile.device_id}...`);
@@ -150,31 +153,44 @@ const { error } = await supabase
     return () => { if (client) client.end(); };
   }, [isAuthenticated, userProfile.device_id]); // <-- Re-runs when the logged-in user changes
 
-  useEffect(() => {
+ useEffect(() => {
     if (!isAuthenticated || !userProfile.device_id) return;
 
     const fetchHistory = async () => {
-    console.log("🚨 FETCHING HISTORY FOR DEVICE ID:", userProfile.device_id); // ADD THIS LINE
+      console.log(`📡 Fetching logs for: ${userProfile.device_id}`);
 
-    const { data: hData, error } = await supabase
-      .from('device_logs').select('*')
-      .eq('device_id', userProfile.device_id) 
-      .order('created_at', { ascending: false }).limit(100);
-    
-    console.log("🚨 SUPABASE RETURNED:", hData, "ERROR:", error); // ADD THIS LINE
-    
-    if (!error && hData) setHistory(hData);
-    // ... rest of the function
-
-      const { count } = await supabase
-        .from('device_logs').select('*', { count: 'exact', head: true })
-        .eq('device_id', userProfile.device_id).gt('current', 0.5); // <-- Counts only this customer's logs
+      // 1. Fetch History Rows
+      const { data: hData, error: hError } = await supabase
+        .from('device_logs')
+        .select('*')
+        .eq('device_id', userProfile.device_id)
+        // NOTE: This order() command will ERROR until you add the column in Supabase
+        .order('created_at', { ascending: false })
+        .limit(100);
       
-      if (count !== null) setDbLogCount(count);
+      if (hError) {
+        console.error("❌ History Data Error:", hError.message);
+      } else {
+        console.log("✅ Data Found:", hData?.length, "rows");
+        setHistory(hData || []);
+      }
+
+      // 2. Fetch Count for Uptime
+      const { count, error: cError } = await supabase
+        .from('device_logs')
+        .select('*', { count: 'exact', head: true })
+        .eq('device_id', userProfile.device_id)
+        .gt('current', 0.5); 
+      
+      if (cError) {
+        console.error("❌ Uptime Count Error:", cError.message);
+      } else if (count !== null) {
+        setDbLogCount(count);
+      }
     };
     
     fetchHistory();
-  }, [activeTab, isAuthenticated, userProfile.device_id]);
+  }, [activeTab, isAuthenticated, userProfile.device_id]);;
 
   // Calculations
   const uptimeHours = (dbLogCount * 20) / 3600; 
