@@ -45,11 +45,8 @@ export default function Dashboard() {
     voltage: 230, current: 0, outputPower: 18.5 
   }); 
 
-  // 1. The Login Function
-  const handleLogin = async (e: React.FormEvent) => {
+ const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log("🔐 Attempting login for:", userInput);
-
     const { data: dbUser, error } = await supabase
       .from('app_users')
       .select('*')
@@ -58,7 +55,7 @@ export default function Dashboard() {
       .single();
 
     if (dbUser) {
-      // MATCHING YOUR TABLE: Using dbUser.device_id exactly as shown in Supabase
+      // This MUST match the column name "device_id" from your Supabase table
       const profile = { 
         name: dbUser.username, 
         device_id: dbUser.device_id 
@@ -66,12 +63,12 @@ export default function Dashboard() {
       
       console.log("✅ Login Success! Device ID found:", dbUser.device_id);
       
+      // This saves the ID so the history table can see it
       localStorage.setItem("sk_session", JSON.stringify(profile));
       setUserProfile(profile);
       setIsAuthenticated(true);
     } else { 
-      console.error("❌ Login failed:", error?.message);
-      alert("Invalid credentials. Please try again."); 
+      alert("Invalid credentials."); 
     }
   };
   // 2. The Logout Function (Now correctly outside)
