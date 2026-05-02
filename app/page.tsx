@@ -48,7 +48,9 @@ export default function Dashboard() {
   // 1. The Login Function
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    const { data: dbUser } = await supabase
+    console.log("🔐 Attempting login for:", userInput);
+
+    const { data: dbUser, error } = await supabase
       .from('app_users')
       .select('*')
       .eq('username', userInput)
@@ -56,19 +58,22 @@ export default function Dashboard() {
       .single();
 
     if (dbUser) {
+      // MATCHING YOUR TABLE: Using dbUser.device_id exactly as shown in Supabase
       const profile = { 
-        name: dbUser.name || dbUser.username, 
-        device_id: dbUser.assigned_device 
+        name: dbUser.username, 
+        device_id: dbUser.device_id 
       };
+      
+      console.log("✅ Login Success! Device ID found:", dbUser.device_id);
       
       localStorage.setItem("sk_session", JSON.stringify(profile));
       setUserProfile(profile);
       setIsAuthenticated(true);
     } else { 
-      alert("Invalid credentials"); 
+      console.error("❌ Login failed:", error?.message);
+      alert("Invalid credentials. Please try again."); 
     }
   };
-
   // 2. The Logout Function (Now correctly outside)
   const handleLogout = () => {
     localStorage.removeItem("sk_session");
