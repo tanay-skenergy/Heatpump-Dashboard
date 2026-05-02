@@ -1,18 +1,18 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createClient } from "@supabase/supabase-js"
+import { createClient } from '@supabase/supabase-js'
+
+const supabaseUrl = 'https://ppdcvzdkejvrhtxkcftv.supabase.co'
+const supabaseKey = 'YOUR_ANON_PUBLIC_KEY' // Do NOT use the service_role key here!
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
 import mqtt from "mqtt"
 import { 
   Activity, Thermometer, Zap, Battery, Gauge as GaugeIcon, 
   Clock, TrendingUp, IndianRupee, ChevronDown, LogOut // <-- Added LogOut here
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || "",
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-)
 
 const Gauge = ({ value, min, max, label }: { value: number; min: number; max: number; label: string }) => {
   const progress = Math.min(Math.max(((value - min) / (max - min)) * 100, 0), 100);
@@ -125,7 +125,7 @@ export default function Dashboard() {
           outletTemp: p.outlet_temp ?? prev.outletTemp
         }));
 
-        if (now - lastSaveTime > 300000) {
+        {
           // Inside your MQTT message listener
 const { error } = await supabase
   .from('device_logs')
@@ -154,12 +154,17 @@ const { error } = await supabase
     if (!isAuthenticated || !userProfile.device_id) return;
 
     const fetchHistory = async () => {
-      const { data: hData, error } = await supabase
-        .from('device_logs').select('*')
-        .eq('device_id', userProfile.device_id) // <-- Pulls only this customer's data
-        .order('created_at', { ascending: false }).limit(100);
-      
-      if (!error && hData) setHistory(hData);
+    console.log("🚨 FETCHING HISTORY FOR DEVICE ID:", userProfile.device_id); // ADD THIS LINE
+
+    const { data: hData, error } = await supabase
+      .from('device_logs').select('*')
+      .eq('device_id', userProfile.device_id) 
+      .order('created_at', { ascending: false }).limit(100);
+    
+    console.log("🚨 SUPABASE RETURNED:", hData, "ERROR:", error); // ADD THIS LINE
+    
+    if (!error && hData) setHistory(hData);
+    // ... rest of the function
 
       const { count } = await supabase
         .from('device_logs').select('*', { count: 'exact', head: true })
