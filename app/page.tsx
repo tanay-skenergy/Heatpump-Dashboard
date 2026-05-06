@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from '@supabase/supabase-js'
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
 const supabaseUrl = 'https://ppdcvzdkejvrhtxkcftv.supabase.co'
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwZGN2emRrZWp2cmh0eGtjZnR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTY0NjMsImV4cCI6MjA5MTAzMjQ2M30.HjffvhdU6rmBGsyyCU4kTl862RpZEzF07BAFD75MGOI' // Do NOT use the service_role key here!
@@ -32,6 +33,49 @@ const Gauge = ({ value, min, max, label }: { value: number; min: number; max: nu
   );
 };
 
+const TempChart = ({ data }: { data: any[] }) => (
+  <div className="h-64 w-full mt-6">
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={data}>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+        <XAxis 
+          dataKey="created_at" 
+          hide 
+        />
+        <YAxis domain={['auto', 'auto']} stroke="#64748b" fontSize={10} tickFormatter={(val) => `${val}°C`} />
+        <Tooltip 
+          contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff' }}
+          labelFormatter={(label) => new Date(label).toLocaleString()}
+        />
+        <Line type="monotone" dataKey="tank_temp" stroke="#22d3ee" strokeWidth={3} dot={false} name="Tank Temp" />
+        <Line type="monotone" dataKey="inlet_temp" stroke="#6366f1" strokeWidth={2} dot={false} name="Inlet Temp" />
+      </LineChart>
+    </ResponsiveContainer>
+  </div>
+);
+
+const PowerChart = ({ data }: { data: any[] }) => (
+  <div className="h-64 w-full mt-6">
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data}>
+        <defs>
+          <linearGradient id="colorCurrent" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+          </linearGradient>
+        </defs>
+        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+        <XAxis dataKey="created_at" hide />
+        <YAxis stroke="#64748b" fontSize={10} tickFormatter={(val) => `${val}A`} />
+        <Tooltip 
+          contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '8px', color: '#fff' }}
+          labelFormatter={(label) => new Date(label).toLocaleString()}
+        />
+        <Area type="monotone" dataKey="current" stroke="#f59e0b" fillOpacity={1} fill="url(#colorCurrent)" name="Current (Amps)" />
+      </AreaChart>
+    </ResponsiveContainer>
+  </div>
+);
 export default function Dashboard() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [userInput, setUserInput] = useState("");
@@ -353,6 +397,18 @@ const minsToHeat = (Number(targetInput) - data.waterTemp) > 0 && powerInputKW > 
         ) : (
           <Card className="rounded-3xl p-8 bg-white shadow-sm border-none">
             <h2 className="text-xl font-black text-slate-900 mb-6">Device History (Last 50 Intervals)</h2>
+            {/* --- PASTE THIS AFTER THE FILTER BAR --- */}
+<div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+  <Card className="p-6 bg-[#0B0E14] border-none shadow-xl">
+    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Temperature Trend (°C)</span>
+    <TempChart data={[...history].reverse()} />
+  </Card>
+  
+  <Card className="p-6 bg-[#0B0E14] border-none shadow-xl">
+    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Compressor Load (Amps)</span>
+    <PowerChart data={[...history].reverse()} />
+  </Card>
+</div>
             {/* --- PASTE THIS IN THE HISTORY TAB SECTION --- */}
 <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
   <div className="flex gap-2">
