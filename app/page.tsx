@@ -40,6 +40,9 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'live' | 'history'>('live');
   const [dbLogCount, setDbLogCount] = useState(0);
   const [history, setHistory] = useState<any[]>([]);
+  const [timeFilter, setTimeFilter] = useState('24h'); // Options: '24h', '7d', 'custom'
+  const [startDate, setStartDate] = useState(''); // For custom date picker
+  const [endDate, setEndDate] = useState(''); // For custom date picker
   const [data, setData] = useState({
     waterTemp: 0, inletTemp: 0, outletTemp: 0, setTemp: 55, 
     voltage: 230, current: 0, outputPower: 18.5 
@@ -156,19 +159,44 @@ const { error } = await supabase
   }, [isAuthenticated, userProfile.device_id]); // <-- Re-runs when the logged-in user changes
 
  useEffect(() => {
-    if (!isAuthenticated || !userProfile.device_id) return;
+    if (!isAuthenticated || !userProfile?.device_id) return;
 
     const fetchHistory = async () => {
-      console.log(`📡 Fetching logs for: ${userProfile.device_id}`);
+      console.log(`📡 Fetching logs for: ${userProfile.device_id} (Filter: ${timeFilter})`);
 
-      // 1. Fetch History Rows
-      const { data: hData, error: hError } = await supabase
+      // --- DATE CALCULATION LOGIC ---
+      let fromDate = null;
+      let toDate = new Date().toISOString(); // Default end-time is "Now"
+
+      if (timeFilter === '24h') {
+        const d = new Date();
+        d.setHours(d.getHours() - 24);
+        fromDate = d.toISOString();
+      } else if (timeFilter === '7d') {
+        const d = new Date();
+        d.setDate(d.getDate() - 7);
+        fromDate = d.toISOString();
+      } else if (timeFilter === 'custom' && startDate && endDate) {
+        // Appends time to make them full days (Start of Day to End of Day)
+        fromDate = new Date(`${startDate}T00:00:00.000Z`).toISOString();
+        toDate = new Date(`${endDate}T23:59:59.999Z`).toISOString();
+      }
+
+      // --- 1. Fetch History Rows ---
+      // Build the query first
+      let historyQuery = supabase
         .from('device_logs')
         .select('*')
         .eq('device_id', userProfile.device_id)
-        // NOTE: This order() command will ERROR until you add the column in Supabase
         .order('created_at', { ascending: false })
-        .limit(100);
+        .limit(500); // Increased limit to handle multiple days of data
+
+      // Apply the date filters to the query if they exist
+      if (fromDate) historyQuery = historyQuery.gte('created_at', fromDate);
+      if (timeFilter === 'custom' && endDate) historyQuery = historyQuery.lte('created_at', toDate);
+
+      // Execute the query
+      const { data: hData, error: hError } = await historyQuery;
       
       if (hError) {
         console.error("❌ History Data Error:", hError.message);
@@ -177,12 +205,20 @@ const { error } = await supabase
         setHistory(hData || []);
       }
 
-      // 2. Fetch Count for Uptime
-      const { count, error: cError } = await supabase
+      // --- 2. Fetch Count for Uptime ---
+      // Build the count query
+      let countQuery = supabase
         .from('device_logs')
         .select('*', { count: 'exact', head: true })
         .eq('device_id', userProfile.device_id)
         .gt('current', 0.5); 
+
+      // Apply the same date filters to the uptime calculation
+      if (fromDate) countQuery = countQuery.gte('created_at', fromDate);
+      if (timeFilter === 'custom' && endDate) countQuery = countQuery.lte('created_at', toDate);
+
+      // Execute the count query
+      const { count, error: cError } = await countQuery;
       
       if (cError) {
         console.error("❌ Uptime Count Error:", cError.message);
@@ -192,7 +228,9 @@ const { error } = await supabase
     };
     
     fetchHistory();
-  }, [activeTab, isAuthenticated, userProfile.device_id]);;
+    // Added the new state variables to the dependency array below so the data 
+    // refreshes automatically when the user clicks a button or changes a date.
+  }, [activeTab, isAuthenticated, userProfile?.device_id, timeFilter, startDate, endDate]);
 
   // Calculations
   const uptimeHours = (dbLogCount * 20) / 3600; 
@@ -218,6 +256,7 @@ const { error } = await supabase
   }
 
   return (
+    
     <div className="min-h-screen bg-[#F8F9FA] p-4 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <header className="flex justify-between items-center mb-6 border-b pb-4">
@@ -272,6 +311,55 @@ const { error } = await supabase
                 </div>
               </Card>
             </div>
+            <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-slate-800 rounded-xl border border-slate-700">
+  <div className="flex gap-2">
+    <button 
+      onClick={() => setTimeFilter('24h')} 
+      className={`px-4 py-2 rounded-lg font-medium transition ${
+        timeFilter === '24h' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+      }`}
+    >
+      Last 24 Hours
+    </button>
+    
+    <button 
+      onClick={() => setTimeFilter('7d')} 
+      className={`px-4 py-2 rounded-lg font-medium transition ${
+        timeFilter === '7d' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+      }`}
+    >
+      Last 7 Days
+    </button>
+
+    <button 
+      onClick={() => setTimeFilter('custom')} 
+      className={`px-4 py-2 rounded-lg font-medium transition ${
+        timeFilter === 'custom' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+      }`}
+    >
+      Custom Range
+    </button>
+  </div>
+
+  {/* Custom Date Pickers (Only visible when 'custom' is selected) */}
+  {timeFilter === 'custom' && (
+    <div className="flex items-center gap-2">
+      <input 
+        type="date" 
+        value={startDate} 
+        onChange={(e) => setStartDate(e.target.value)}
+        className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white color-scheme-dark"
+      />
+      <span className="text-slate-400">to</span>
+      <input 
+        type="date" 
+        value={endDate} 
+        onChange={(e) => setEndDate(e.target.value)}
+        className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white color-scheme-dark"
+      />
+    </div>
+  )}
+</div>
 
             {/* Grid of 8 Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
