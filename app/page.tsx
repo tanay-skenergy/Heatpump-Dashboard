@@ -2,17 +2,17 @@
 
 import { useState, useEffect } from "react"
 import { createClient } from '@supabase/supabase-js'
-
-const supabaseUrl = 'https://ppdcvzdkejvrhtxkcftv.supabase.co'
-const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwZGN2emRrZWp2cmh0eGtjZnR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTY0NjMsImV4cCI6MjA5MTAzMjQ2M30.HjffvhdU6rmBGsyyCU4kTl862RpZEzF07BAFD75MGOI' // Do NOT use the service_role key here!
-
-export const supabase = createClient(supabaseUrl, supabaseKey)
 import mqtt from "mqtt"
 import { 
   Activity, Thermometer, Zap, Battery, Gauge as GaugeIcon, 
-  Clock, TrendingUp, IndianRupee, ChevronDown, LogOut // <-- Added LogOut here
+  Clock, TrendingUp, IndianRupee, ChevronDown, LogOut 
 } from "lucide-react"
 import { Card } from "@/components/ui/card"
+
+const supabaseUrl = 'https://ppdcvzdkejvrhtxkcftv.supabase.co'
+const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwZGN2emRrZWp2cmh0eGtjZnR2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzU0NTY0NjMsImV4cCI6MjA5MTAzMjQ2M30.HjffvhdU6rmBGsyyCU4kTl862RpZEzF07BAFD75MGOI' 
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
 
 const Gauge = ({ value, min, max, label }: { value: number; min: number; max: number; label: string }) => {
   const progress = Math.min(Math.max(((value - min) / (max - min)) * 100, 0), 100);
@@ -40,9 +40,9 @@ export default function Dashboard() {
   const [activeTab, setActiveTab] = useState<'live' | 'history'>('live');
   const [dbLogCount, setDbLogCount] = useState(0);
   const [history, setHistory] = useState<any[]>([]);
-  const [timeFilter, setTimeFilter] = useState('24h'); // Options: '24h', '7d', 'custom'
-  const [startDate, setStartDate] = useState(''); // For custom date picker
-  const [endDate, setEndDate] = useState(''); // For custom date picker
+  const [timeFilter, setTimeFilter] = useState('all'); // CHANGED: Defaults to all time so you see your old data
+  const [startDate, setStartDate] = useState(''); 
+  const [endDate, setEndDate] = useState(''); 
   const [data, setData] = useState({
     waterTemp: 0, inletTemp: 0, outletTemp: 0, setTemp: 55, 
     voltage: 230, current: 0, outputPower: 18.5 
@@ -58,7 +58,6 @@ export default function Dashboard() {
       .single();
 
     if (dbUser) {
-      // This MUST match the column name "device_id" from your Supabase table
       const profile = { 
         name: dbUser.username, 
         device_id: dbUser.device_id 
@@ -66,7 +65,6 @@ export default function Dashboard() {
       
       console.log("✅ Login Success! Device ID found:", dbUser.device_id);
       
-      // This saves the ID so the history table can see it
       localStorage.setItem("sk_session", JSON.stringify(profile));
       setUserProfile(profile);
       setIsAuthenticated(true);
@@ -74,14 +72,13 @@ export default function Dashboard() {
       alert("Invalid credentials."); 
     }
   };
-  // 2. The Logout Function (Now correctly outside)
+
   const handleLogout = () => {
     localStorage.removeItem("sk_session");
     setIsAuthenticated(false);
     setUserProfile({ name: "", device_id: "" });
   };
 
-  // 3. The Session Persistence Check
   useEffect(() => {
     const savedSession = localStorage.getItem("sk_session");
     if (savedSession) {
@@ -95,11 +92,7 @@ export default function Dashboard() {
     }
   }, []);
 
-    useEffect(() => {
-    console.log("🛠️ DEBUG: useEffect triggered. Auth:", isAuthenticated, "Device:", userProfile.device_id);
-    
-    if (!isAuthenticated || !userProfile.device_id) return;
-    // ... rest of the code// Stop here if no user is logged in or they don't have a device assigned yet
+  useEffect(() => {
     if (!isAuthenticated || !userProfile.device_id) return;
 
     console.log(`🔄 Starting MQTT Connection for device: ${userProfile.device_id}...`);
@@ -119,12 +112,9 @@ export default function Dashboard() {
       console.error("❌ MQTT Connection Failed!", err);
     });
 
-    let lastSaveTime = 0; 
-
     client.on("message", async (topic, message) => {
       try {
         const p = JSON.parse(message.toString());
-        const now = Date.now(); 
         
         setData(prev => ({ ...prev, 
           waterTemp: p.tank_temp ?? prev.waterTemp,
@@ -133,30 +123,23 @@ export default function Dashboard() {
           outletTemp: p.outlet_temp ?? prev.outletTemp
         }));
 
-        {
-          // Inside your MQTT message listener
-const { error } = await supabase
-  .from('device_logs')
-  .insert([{ 
-    // THIS IS THE AUTOMATION:
-    device_id: userProfile.device_id, 
-    
-    tank_temp: p.tank_temp,
-    inlet_temp: p.inlet_temp,
-    outlet_temp: p.outlet_temp,
-    current: p.current
-  }]);
+        await supabase
+          .from('device_logs')
+          .insert([{ 
+            device_id: userProfile.device_id, 
+            tank_temp: p.tank_temp,
+            inlet_temp: p.inlet_temp,
+            outlet_temp: p.outlet_temp,
+            current: p.current
+          }]);
 
-          if (!error) lastSaveTime = now; 
-        }
       } catch (e) { 
         console.error("❌ Logic Error:", e); 
       }
     });
 
-    // Cleanup connection when user logs out or leaves page
     return () => { if (client) client.end(); };
-  }, [isAuthenticated, userProfile.device_id]); // <-- Re-runs when the logged-in user changes
+  }, [isAuthenticated, userProfile.device_id]); 
 
  useEffect(() => {
     if (!isAuthenticated || !userProfile?.device_id) return;
@@ -164,9 +147,8 @@ const { error } = await supabase
     const fetchHistory = async () => {
       console.log(`📡 Fetching logs for: ${userProfile.device_id} (Filter: ${timeFilter})`);
 
-      // --- DATE CALCULATION LOGIC ---
       let fromDate = null;
-      let toDate = new Date().toISOString(); // Default end-time is "Now"
+      let toDate = new Date().toISOString(); 
 
       if (timeFilter === '24h') {
         const d = new Date();
@@ -177,25 +159,20 @@ const { error } = await supabase
         d.setDate(d.getDate() - 7);
         fromDate = d.toISOString();
       } else if (timeFilter === 'custom' && startDate && endDate) {
-        // Appends time to make them full days (Start of Day to End of Day)
         fromDate = new Date(`${startDate}T00:00:00.000Z`).toISOString();
         toDate = new Date(`${endDate}T23:59:59.999Z`).toISOString();
       }
 
-      // --- 1. Fetch History Rows ---
-      // Build the query first
       let historyQuery = supabase
         .from('device_logs')
         .select('*')
         .eq('device_id', userProfile.device_id)
         .order('created_at', { ascending: false })
-        .limit(500); // Increased limit to handle multiple days of data
+        .limit(500); 
 
-      // Apply the date filters to the query if they exist
       if (fromDate) historyQuery = historyQuery.gte('created_at', fromDate);
       if (timeFilter === 'custom' && endDate) historyQuery = historyQuery.lte('created_at', toDate);
 
-      // Execute the query
       const { data: hData, error: hError } = await historyQuery;
       
       if (hError) {
@@ -205,19 +182,15 @@ const { error } = await supabase
         setHistory(hData || []);
       }
 
-      // --- 2. Fetch Count for Uptime ---
-      // Build the count query
       let countQuery = supabase
         .from('device_logs')
         .select('*', { count: 'exact', head: true })
         .eq('device_id', userProfile.device_id)
         .gt('current', 0.5); 
 
-      // Apply the same date filters to the uptime calculation
       if (fromDate) countQuery = countQuery.gte('created_at', fromDate);
       if (timeFilter === 'custom' && endDate) countQuery = countQuery.lte('created_at', toDate);
 
-      // Execute the count query
       const { count, error: cError } = await countQuery;
       
       if (cError) {
@@ -228,11 +201,8 @@ const { error } = await supabase
     };
     
     fetchHistory();
-    // Added the new state variables to the dependency array below so the data 
-    // refreshes automatically when the user clicks a button or changes a date.
   }, [activeTab, isAuthenticated, userProfile?.device_id, timeFilter, startDate, endDate]);
 
-  // Calculations
   const uptimeHours = (dbLogCount * 20) / 3600; 
   const powerInputKW = (data.voltage * data.current) / 1000;
   const cop = powerInputKW > 0 ? (data.outputPower / powerInputKW) : 0;
@@ -256,7 +226,6 @@ const { error } = await supabase
   }
 
   return (
-    
     <div className="min-h-screen bg-[#F8F9FA] p-4 lg:p-8">
       <div className="max-w-7xl mx-auto">
         <header className="flex justify-between items-center mb-6 border-b pb-4">
@@ -267,7 +236,6 @@ const { error } = await supabase
                <button onClick={() => setActiveTab('history')} className={`font-bold text-[10px] tracking-widest uppercase ${activeTab === 'history' ? 'text-cyan-600 border-b-2 border-cyan-600' : 'text-slate-400'}`}>Data History</button>
              </nav>
           </div>
-          {/* User Profile & Logout Section */}
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 bg-slate-800 rounded-full flex items-center justify-center text-white text-[10px] font-bold uppercase">
@@ -294,7 +262,6 @@ const { error } = await supabase
                <Clock className="h-3 w-3" /> System Status: {data.current > 0.5 ? 'Working' : 'Standby'}
             </div>
 
-            {/* Top Row: Gauge and Setpoint */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
               <Card className="lg:col-span-8 bg-[#0B0E14] p-8 rounded-3xl shadow-2xl">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Current Tank Temperature</span>
@@ -311,57 +278,7 @@ const { error } = await supabase
                 </div>
               </Card>
             </div>
-            <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-slate-800 rounded-xl border border-slate-700">
-  <div className="flex gap-2">
-    <button 
-      onClick={() => setTimeFilter('24h')} 
-      className={`px-4 py-2 rounded-lg font-medium transition ${
-        timeFilter === '24h' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-      }`}
-    >
-      Last 24 Hours
-    </button>
-    
-    <button 
-      onClick={() => setTimeFilter('7d')} 
-      className={`px-4 py-2 rounded-lg font-medium transition ${
-        timeFilter === '7d' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-      }`}
-    >
-      Last 7 Days
-    </button>
 
-    <button 
-      onClick={() => setTimeFilter('custom')} 
-      className={`px-4 py-2 rounded-lg font-medium transition ${
-        timeFilter === 'custom' ? 'bg-blue-500 text-white' : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-      }`}
-    >
-      Custom Range
-    </button>
-  </div>
-
-  {/* Custom Date Pickers (Only visible when 'custom' is selected) */}
-  {timeFilter === 'custom' && (
-    <div className="flex items-center gap-2">
-      <input 
-        type="date" 
-        value={startDate} 
-        onChange={(e) => setStartDate(e.target.value)}
-        className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white color-scheme-dark"
-      />
-      <span className="text-slate-400">to</span>
-      <input 
-        type="date" 
-        value={endDate} 
-        onChange={(e) => setEndDate(e.target.value)}
-        className="px-3 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white color-scheme-dark"
-      />
-    </div>
-  )}
-</div>
-
-            {/* Grid of 8 Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { label: "Voltage", val: `${data.voltage} V`, icon: <Zap className="h-3 w-3" /> },
@@ -385,7 +302,64 @@ const { error } = await supabase
           </div>
         ) : (
           <Card className="rounded-3xl p-8 bg-white shadow-sm border-none">
-            <h2 className="text-xl font-black text-slate-900 mb-6">Device History (Last 50 Intervals)</h2>
+            <h2 className="text-xl font-black text-slate-900 mb-6">Device History</h2>
+            
+            {/* MOVED FILTERS HERE */}
+            <div className="flex flex-wrap items-center gap-4 mb-6 p-4 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => setTimeFilter('all')} 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    timeFilter === 'all' ? 'bg-[#0f172a] text-white' : 'bg-white text-slate-600 border hover:bg-slate-50'
+                  }`}
+                >
+                  All Time
+                </button>
+                <button 
+                  onClick={() => setTimeFilter('24h')} 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    timeFilter === '24h' ? 'bg-[#0f172a] text-white' : 'bg-white text-slate-600 border hover:bg-slate-50'
+                  }`}
+                >
+                  Last 24 Hours
+                </button>
+                <button 
+                  onClick={() => setTimeFilter('7d')} 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    timeFilter === '7d' ? 'bg-[#0f172a] text-white' : 'bg-white text-slate-600 border hover:bg-slate-50'
+                  }`}
+                >
+                  Last 7 Days
+                </button>
+                <button 
+                  onClick={() => setTimeFilter('custom')} 
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition ${
+                    timeFilter === 'custom' ? 'bg-[#0f172a] text-white' : 'bg-white text-slate-600 border hover:bg-slate-50'
+                  }`}
+                >
+                  Custom Range
+                </button>
+              </div>
+
+              {timeFilter === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="date" 
+                    value={startDate} 
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm"
+                  />
+                  <span className="text-slate-400 text-sm">to</span>
+                  <input 
+                    type="date" 
+                    value={endDate} 
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="px-3 py-2 bg-white border border-slate-200 rounded-lg text-slate-900 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
             <div className="overflow-x-auto">
                <table className="w-full text-left">
                  <thead>
