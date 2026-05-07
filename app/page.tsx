@@ -290,15 +290,40 @@ const minsToHeat = (Number(targetInput) - data.waterTemp) > 0 && powerInputKW > 
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-        <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md text-center">
-          <div className="mb-8"><span className="text-2xl font-black text-[#0f172a]">sk<span className="text-orange-500">e</span>nergy.in</span></div>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <input type="text" value={userInput} onChange={(e) => setUserInput(e.target.value)} placeholder="Username" className="w-full p-4 rounded-xl border border-slate-200" required/>
-            <input type="password" value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)} placeholder="Password" className="w-full p-4 rounded-xl border border-slate-200" required/>
-            <button type="submit" className="w-full bg-[#0f172a] text-white py-4 rounded-xl font-bold">Enter Dashboard</button>
-          </form>
-        </div>
-      </div>
+  <div className="bg-white p-8 rounded-3xl shadow-xl w-full max-w-md text-center">
+    <div className="mb-8">
+      <span className="text-2xl font-black text-[#0f172a]">
+        sk<span className="text-orange-500">e</span>nergy.in
+      </span>
+    </div>
+    <form onSubmit={handleLogin} className="space-y-4">
+      <input 
+        type="text" 
+        value={userInput} 
+        onChange={(e) => setUserInput(e.target.value)} 
+        placeholder="Username" 
+         
+        className="w-full p-4 rounded-xl border border-slate-400 text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500" 
+        required
+      />
+      <input 
+        type="password" 
+        value={passwordInput} 
+        onChange={(e) => setPasswordInput(e.target.value)} 
+        placeholder="Password" 
+        
+        className="w-full p-4 rounded-xl border border-slate-400 text-slate-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-500" 
+        required
+      />
+      <button 
+        type="submit" 
+        className="w-full bg-[#0f172a] text-white py-4 rounded-xl font-bold hover:bg-slate-800 transition-colors"
+      >
+        Enter Dashboard
+      </button>
+    </form>
+  </div>
+</div>
     );
   }
 
