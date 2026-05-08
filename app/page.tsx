@@ -171,26 +171,30 @@ export default function Dashboard() {
         const p = JSON.parse(message.toString());
         const now = Date.now(); 
         
+        // --- ADDED SCALING LOGIC HERE ---
+        const scaledTank = p.tank_temp !== undefined ? p.tank_temp / 10 : null;
+        const scaledCurrent = p.current !== undefined ? p.current / 10 : null;
+        const scaledInlet = p.inlet_temp !== undefined ? p.inlet_temp / 10 : null;
+        const scaledOutlet = p.outlet_temp !== undefined ? p.outlet_temp / 10 : null;
+
         setData(prev => ({ ...prev, 
-          waterTemp: p.tank_temp ?? prev.waterTemp,
-          current: p.current ?? prev.current,
-          inletTemp: p.inlet_temp ?? prev.inletTemp,
-          outletTemp: p.outlet_temp ?? prev.outletTemp
+          waterTemp: scaledTank ?? prev.waterTemp,
+          current: scaledCurrent ?? prev.current,
+          inletTemp: scaledInlet ?? prev.inletTemp,
+          outletTemp: scaledOutlet ?? prev.outletTemp
         }));
 
         {
-          // Inside your MQTT message listener
-const { error } = await supabase
-  .from('device_logs')
-  .insert([{ 
-    // THIS IS THE AUTOMATION:
-    device_id: userProfile.device_id, 
-    
-    tank_temp: p.tank_temp,
-    inlet_temp: p.inlet_temp,
-    outlet_temp: p.outlet_temp,
-    current: p.current
-  }]);
+        // Now pushing the SCALED values to Supabase to fix the 400 error
+        const { error } = await supabase
+          .from('device_logs')
+          .insert([{ 
+            device_id: userProfile.device_id, 
+            tank_temp: scaledTank,
+            inlet_temp: scaledInlet,
+            outlet_temp: scaledOutlet,
+            current: scaledCurrent
+          }]);
 
           if (!error) lastSaveTime = now; 
         }
